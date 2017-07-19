@@ -26,7 +26,8 @@ from txclib import utils
 from urllib3.exceptions import SSLError
 from six.moves import input
 from txclib.exceptions import (
-    HttpNotFound, HttpNotAuthorized, MalformedConfigFile
+    HttpNotFound, HttpNotAuthorized, MalformedConfigFile,
+    AuthenticationError
 )
 from txclib.urls import API_URLS
 from txclib.config import OrderedRawConfigParser, Flipdict, CERT_REQUIRED
@@ -47,6 +48,15 @@ class Project(object):
 
     SKIP_DECODE_I18N_TYPES = ['DOCX', 'XLSX']
     FILE_FILTER = "translations<sep>%(proj)s.%(res)s<sep><lang>.%(extension)s"
+    AUTHENTICATION_FAILED_MESSAGE = (
+        "Error: Authentication failed. Please make sure your "
+        "credentials are valid. You can update your credentials "
+        "in the ~/.transifexrc file. For more information, "
+        "visit https://docs.transifex.com/client/client-configuration#-transifexrc."  # noqa
+    )
+    NOT_AUTHORIZED_MESSAGE = (
+        "Error: You do not have permission to perform this action."
+    )
 
     def __init__(self, path_to_tx=None, init=True):
         """Initialize the Project attributes."""
@@ -230,14 +240,27 @@ class Project(object):
                 save = True
 
         if save:
-            logger.info("Updating %s file..." % self.txrc_file)
-            if not self.txrc.has_section(host):
-                logger.info("No entry found for host %s. Creating..." % host)
-                self.txrc.add_section(host)
-            self.txrc.set(host, 'username', username)
-            self.txrc.set(host, 'password', password)
-            self.txrc.set(host, 'hostname', host)
-            self.save()
+            logger.info("Validating credentials...")
+            try:
+                url = API_URLS.get('projects', None)
+                if url:
+                    utils.make_request('GET', host, url, username, password)
+            except AuthenticationError as e:
+                logger.info("Error: Authentication failed."
+                            " Please make sure your credentials are valid.")
+
+            except Exception as e:
+                logger.info("Authentication failed: %s" % e.message)
+            else:
+                logger.info("Updating %s file..." % self.txrc_file)
+                if not self.txrc.has_section(host):
+                    logger.info("No entry found for host %s. Creating..."
+                                % host)
+                    self.txrc.add_section(host)
+                self.txrc.set(host, 'username', username)
+                self.txrc.set(host, 'password', password)
+                self.txrc.set(host, 'hostname', host)
+                self.save()
         return username, password
 
     def set_remote_resource(self, resource, source_lang, i18n_type, host,
@@ -495,8 +518,11 @@ class Project(object):
             except Exception as e:
                 if isinstance(e, SSLError):
                     raise
+                if isinstance(e, AuthenticationError):
+                    logger.error(self.AUTHENTICATION_FAILED_MESSAGE)
+                    continue
                 if isinstance(e, HttpNotAuthorized):
-                    logger.error("Request is not authorized.")
+                    logger.error(self.NOT_AUTHORIZED_MESSAGE)
                     continue
                 if isinstance(e, HttpNotFound):
                     msg = "Resource %s doesn't exist on the server."
@@ -740,8 +766,8 @@ class Project(object):
                 except Exception as e:
                     if isinstance(e, SSLError):
                         raise
-                    if isinstance(e, HttpNotAuthorized):
-                        logger.error("Request is not authorized.")
+                    if isinstance(e, AuthenticationError):
+                        logger.error(self.AUTHENTICATION_FAILED_MESSAGE)
                         continue
                     if isinstance(e, HttpNotFound):
                         msg = "Resource %s doesn't exist on the server."
@@ -838,8 +864,11 @@ class Project(object):
             except Exception as e:
                 if isinstance(e, SSLError):
                     raise
+                if isinstance(e, AuthenticationError):
+                    logger.error(self.AUTHENTICATION_FAILED_MESSAGE)
+                    return
                 if isinstance(e, HttpNotAuthorized):
-                    logger.error("Request is not authorized.")
+                    logger.error(self.NOT_AUTHORIZED_MESSAGE)
                     continue
                 if isinstance(e, HttpNotFound):
                     msg = "Resource %s doesn't exist on the server."
@@ -881,6 +910,12 @@ class Project(object):
             msg = "Deleted resource %s of project %s."
             logger.info(msg % (resource_slug, project_slug))
         except Exception as e:
+            if isinstance(e, AuthenticationError):
+                logger.error(self.AUTHENTICATION_FAILED_MESSAGE)
+                return
+            if isinstance(e, HttpNotAuthorized):
+                logger.error(self.NOT_AUTHORIZED_MESSAGE)
+                return
             msg = "Unable to delete resource %s of project %s."
             logger.error(msg % (resource_slug, project_slug))
             if isinstance(e, SSLError) or not self.skip:
@@ -928,6 +963,12 @@ class Project(object):
             msg = "Deleted language %s from resource %s of project %s."
             logger.info(msg % (language, resource_slug, project_slug))
         except Exception as e:
+            if isinstance(e, AuthenticationError):
+                logger.error(self.AUTHENTICATION_FAILED_MESSAGE)
+                return
+            if isinstance(e, HttpNotAuthorized):
+                logger.error(self.NOT_AUTHORIZED_MESSAGE)
+                return
             msg = "Unable to delete translation %s"
             logger.error(msg % language)
             if isinstance(e, SSLError) or not self.skip:

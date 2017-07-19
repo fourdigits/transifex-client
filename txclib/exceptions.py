@@ -12,6 +12,7 @@ class UnInitializedError(Exception):
 class UnknownCommandError(Exception):
     """The provided command is not supported."""
 
+
 class MalformedConfigFile(Exception):
     pass
 
@@ -23,4 +24,8 @@ class HttpNotFound(Exception):
 
 
 class HttpNotAuthorized(Exception):
+    pass
+
+
+class AuthenticationError(Exception):
     pass

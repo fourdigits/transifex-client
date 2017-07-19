@@ -18,4 +18,5 @@ API_URLS = {
     'delete_translation': '/api/2/project/%(project)s/resource/%(resource)s/translation/%(language)s/',
     'formats': '/api/2/formats/',
     'delete_resource': '/api/2/project/%(project)s/resource/%(resource)s/',
+    'projects': '/api/2/projects/',
 }

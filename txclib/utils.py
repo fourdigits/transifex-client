@@ -18,7 +18,8 @@ from urllib3.exceptions import SSLError
 from six.moves import input
 from txclib.urls import API_URLS
 from txclib.exceptions import (
-    UnknownCommandError, HttpNotFound, HttpNotAuthorized
+    UnknownCommandError, HttpNotFound, HttpNotAuthorized,
+    AuthenticationError
 )
 from txclib.paths import posix_path, native_path, posix_sep
 from txclib.web import user_agent_identifier, certs_file
@@ -174,6 +175,8 @@ def make_request(method, host, url, username, password, fields=None,
                 data = data.decode(charset)
         if response.status < 200 or response.status >= 400:
             if response.status == 401:
+                raise AuthenticationError(data)
+            if response.status == 403:
                 raise HttpNotAuthorized(data)
             elif response.status == 404:
                 raise HttpNotFound(data)
